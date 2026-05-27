@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   scroll: { flex: 1 },
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingTop: 16, paddingHorizontal: 16 },
 
   statsCard: {
     flexDirection: 'row',

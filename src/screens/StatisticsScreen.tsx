@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#111827', fontWeight: '700' },
 
   scroll: { flex: 1 },
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingTop: 16, paddingHorizontal: 16 },
 
   summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
   summaryCard: {

@@ -121,7 +121,6 @@ export function RecordsScreen() {
           { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16 },
         ]}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={showCalendar ? [0] : []}
       >
         {/* Calendar */}
         {showCalendar && (
@@ -217,7 +216,7 @@ const styles = StyleSheet.create({
   monthLabel: { fontSize: 16, fontWeight: '700', color: '#111827' },
   monthTotal: { fontSize: 13, fontWeight: '600', color: '#059669' },
   scroll: { flex: 1 },
-  scrollContent: { padding: 12, paddingBottom: 32 },
+  scrollContent: { paddingTop: 12, paddingHorizontal: 12 },
   calendarCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
