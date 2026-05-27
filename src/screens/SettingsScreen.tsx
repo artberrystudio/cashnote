@@ -50,12 +50,20 @@ function webReadFile(): Promise<string> {
 
 const TAB_BAR_HEIGHT = 64;
 
+const SYNC_LABEL: Record<string, { text: string; color: string; bg: string }> = {
+  online:  { text: '● Supabase 연결됨', color: '#059669', bg: '#D1FAE5' },
+  offline: { text: '● 오프라인 (로컬 저장)',  color: '#D97706', bg: '#FEF3C7' },
+  syncing: { text: '↻ 동기화 중…',      color: '#2563EB', bg: '#DBEAFE' },
+  idle:    { text: '— 대기 중',          color: '#9CA3AF', bg: '#F3F4F6' },
+};
+
 export function SettingsScreen() {
-  const { records, loadRecords } = useStore();
+  const { records, loadRecords, syncStatus, userId } = useStore();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState<string | null>(null);
 
   const totalAmount = records.reduce((s, r) => s + r.amount, 0);
+  const sync = SYNC_LABEL[syncStatus] ?? SYNC_LABEL.idle;
 
   // ── 새로고침 ──────────────────────────────────────────────
   const handleRefresh = async () => {
@@ -251,6 +259,14 @@ export function SettingsScreen() {
           { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16 },
         ]}
       >
+
+        {/* 동기화 상태 */}
+        <View style={[styles.syncBadge, { backgroundColor: sync.bg }]}>
+          <Text style={[styles.syncText, { color: sync.color }]}>{sync.text}</Text>
+          {userId ? (
+            <Text style={styles.syncUid} numberOfLines={1}>ID: {userId.slice(0, 8)}…</Text>
+          ) : null}
+        </View>
 
         {/* 데이터 요약 */}
         <View style={styles.statsCard}>
@@ -470,6 +486,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   badgeText: { fontSize: 12, fontWeight: '700', color: '#059669' },
+
+  syncBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  syncText: { fontSize: 13, fontWeight: '600' },
+  syncUid: { fontSize: 11, color: '#9CA3AF' },
 
   footer: {
     textAlign: 'center',

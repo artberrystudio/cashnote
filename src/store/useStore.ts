@@ -2,39 +2,32 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { IncomeRecord } from '../types';
 import { generateId } from '../utils/format';
+import {
+  ensureAuth,
+  sbFetchAll,
+  sbInsert,
+  sbUpdate,
+  sbDelete,
+  sbBulkInsert,
+} from '../lib/supabase';
 
 const STORAGE_KEY = '@cashnote_records';
+const MIGRATION_KEY = '@cashnote_sb_migrated';
 
-// ── 저장 재시도 ───────────────────────────────────────────────
-async function persist(records: IncomeRecord[]): Promise<void> {
-  const json = JSON.stringify(records);
-
-  // 1차 시도
+// ── 로컬 캐시 ─────────────────────────────────────────────────
+async function cacheSet(records: IncomeRecord[]) {
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, json);
-    return;
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(records));
   } catch (e) {
-    console.warn('[CashNote] 1차 저장 실패, 재시도…', e);
-  }
-
-  // 2차 시도 (100ms 후)
-  await new Promise((r) => setTimeout(r, 100));
-  try {
-    await AsyncStorage.setItem(STORAGE_KEY, json);
-    return;
-  } catch (e) {
-    console.error('[CashNote] 저장 최종 실패 — 데이터 손실 위험', e);
-    throw e; // 호출부에서 Alert 처리
+    console.warn('[Cache] 저장 실패:', e);
   }
 }
-
-// ── 안전한 JSON 파싱 ──────────────────────────────────────────
-function safeParse(raw: string | null): IncomeRecord[] {
-  if (!raw) return [];
+async function cacheGet(): Promise<IncomeRecord[]> {
   try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    // 필수 필드 검증
     return parsed.filter(
       (r) =>
         r &&
@@ -42,16 +35,21 @@ function safeParse(raw: string | null): IncomeRecord[] {
         typeof r.name === 'string' &&
         typeof r.amount === 'number' &&
         typeof r.category === 'string' &&
-        typeof r.date === 'string'
+        typeof r.date === 'string',
     );
   } catch {
     return [];
   }
 }
 
+// ── 스토어 타입 ───────────────────────────────────────────────
+export type SyncStatus = 'idle' | 'syncing' | 'online' | 'offline';
+
 interface StoreState {
   records: IncomeRecord[];
   isLoaded: boolean;
+  syncStatus: SyncStatus;
+  userId: string | null;
   saveError: string | null;
   loadRecords: () => Promise<void>;
   addRecord: (data: Omit<IncomeRecord, 'id' | 'createdAt'>) => Promise<boolean>;
@@ -63,21 +61,48 @@ interface StoreState {
 export const useStore = create<StoreState>((set, get) => ({
   records: [],
   isLoaded: false,
+  syncStatus: 'idle',
+  userId: null,
   saveError: null,
 
   clearSaveError: () => set({ saveError: null }),
 
+  // ── 초기 로드 ─────────────────────────────────────────────
   loadRecords: async () => {
-    try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      const records = safeParse(raw);
-      set({ records, isLoaded: true });
-    } catch (e) {
-      console.error('[CashNote] 데이터 불러오기 실패', e);
-      set({ records: [], isLoaded: true });
+    set({ syncStatus: 'syncing' });
+
+    // 1) 로컬 캐시 먼저 표시 (빠른 초기 렌더)
+    const cached = await cacheGet();
+    if (cached.length > 0) {
+      set({ records: cached, isLoaded: true });
+    }
+
+    // 2) Supabase 인증
+    const uid = await ensureAuth();
+    if (!uid) {
+      set({ isLoaded: true, syncStatus: 'offline' });
+      return;
+    }
+    set({ userId: uid });
+
+    // 3) 로컬 데이터 마이그레이션 (최초 1회)
+    const migrated = await AsyncStorage.getItem(MIGRATION_KEY);
+    if (!migrated && cached.length > 0) {
+      await sbBulkInsert(cached, uid);
+      await AsyncStorage.setItem(MIGRATION_KEY, '1');
+    }
+
+    // 4) Supabase에서 최신 데이터 로드
+    const remote = await sbFetchAll();
+    if (remote !== null) {
+      set({ records: remote, isLoaded: true, syncStatus: 'online' });
+      await cacheSet(remote);
+    } else {
+      set({ isLoaded: true, syncStatus: 'offline' });
     }
   },
 
+  // ── 추가 ─────────────────────────────────────────────────
   addRecord: async (data) => {
     const record: IncomeRecord = {
       ...data,
@@ -86,39 +111,55 @@ export const useStore = create<StoreState>((set, get) => ({
     };
     const next = [record, ...get().records];
     set({ records: next }); // 즉시 UI 반영
-    try {
-      await persist(next);
-      return true;
-    } catch {
-      // 롤백
-      set({ records: get().records.filter((r) => r.id !== record.id), saveError: '저장 실패: 저장 공간을 확인해주세요.' });
-      return false;
+
+    const uid = get().userId;
+    if (uid) {
+      const ok = await sbInsert(record, uid);
+      if (!ok) {
+        set({ records: get().records.filter((r) => r.id !== record.id), saveError: '저장 실패 — 네트워크를 확인해주세요.' });
+        return false;
+      }
     }
+    await cacheSet(next);
+    return true;
   },
 
+  // ── 수정 ─────────────────────────────────────────────────
   updateRecord: async (id, data) => {
     const prev = get().records;
-    const next = prev.map((r) => (r.id === id ? { ...r, ...data } : r));
+    const updated = prev.find((r) => r.id === id);
+    if (!updated) return false;
+    const record: IncomeRecord = { ...updated, ...data };
+    const next = prev.map((r) => (r.id === id ? record : r));
     set({ records: next });
-    try {
-      await persist(next);
-      return true;
-    } catch {
-      set({ records: prev, saveError: '수정 저장 실패: 저장 공간을 확인해주세요.' });
-      return false;
+
+    const uid = get().userId;
+    if (uid) {
+      const ok = await sbUpdate(record, uid);
+      if (!ok) {
+        set({ records: prev, saveError: '수정 저장 실패 — 네트워크를 확인해주세요.' });
+        return false;
+      }
     }
+    await cacheSet(next);
+    return true;
   },
 
+  // ── 삭제 ─────────────────────────────────────────────────
   deleteRecord: async (id) => {
     const prev = get().records;
     const next = prev.filter((r) => r.id !== id);
     set({ records: next });
-    try {
-      await persist(next);
-      return true;
-    } catch {
-      set({ records: prev, saveError: '삭제 저장 실패' });
-      return false;
+
+    const uid = get().userId;
+    if (uid) {
+      const ok = await sbDelete(id);
+      if (!ok) {
+        set({ records: prev, saveError: '삭제 실패 — 네트워크를 확인해주세요.' });
+        return false;
+      }
     }
+    await cacheSet(next);
+    return true;
   },
 }));
