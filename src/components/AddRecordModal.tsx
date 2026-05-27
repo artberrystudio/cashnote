@@ -156,11 +156,14 @@ export function AddRecordModal({ visible, onClose, onSave, editRecord }: Props) 
                   style={[styles.input, styles.amountInput]}
                   placeholder="0"
                   placeholderTextColor="#D1D5DB"
-                  keyboardType="numeric"
-                  value={amountText ? getFormattedAmount() : ''}
+                  keyboardType="number-pad"
+                  value={amountText}
                   onChangeText={handleAmountChange}
                   returnKeyType="done"
                 />
+                {amountText ? (
+                  <Text style={styles.amountPreview}>{getFormattedAmount()} 원</Text>
+                ) : null}
               </View>
             </View>
 
@@ -401,6 +404,13 @@ const styles = StyleSheet.create({
     color: '#059669',
     fontWeight: '700',
     marginRight: 4,
+  },
+  amountPreview: {
+    marginTop: 4,
+    marginLeft: 4,
+    fontSize: 13,
+    color: '#059669',
+    fontWeight: '600',
   },
   amountInput: {
     flex: 1,

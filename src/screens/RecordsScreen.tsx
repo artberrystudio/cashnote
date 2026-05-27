@@ -5,129 +5,159 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  StatusBar,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../store/useStore';
 import { RecordCard } from '../components/RecordCard';
+import { MonthCalendar } from '../components/MonthCalendar';
 import { AddRecordModal } from '../components/AddRecordModal';
-import { IncomeRecord, FilterTab } from '../types';
-import { getTodayString, getWeekStart, getMonthStart, formatKRW } from '../utils/format';
-
-const TABS: { key: FilterTab; label: string }[] = [
-  { key: 'all', label: '전체' },
-  { key: 'today', label: '오늘' },
-  { key: 'week', label: '이번 주' },
-  { key: 'month', label: '이번 달' },
-];
+import { IncomeRecord } from '../types';
+import { formatKRW } from '../utils/format';
 
 export function RecordsScreen() {
   const { records, addRecord, updateRecord, deleteRecord } = useStore();
-  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+
+  const now = new Date();
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth() + 1);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showCalendar, setShowCalendar] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editRecord, setEditRecord] = useState<IncomeRecord | null>(null);
 
-  const today = getTodayString();
-  const weekStart = getWeekStart();
-  const monthStart = getMonthStart();
-
-  const filtered = useMemo(() => {
-    let base = [...records];
-    if (activeTab === 'today') base = base.filter((r) => r.date === today);
-    else if (activeTab === 'week') base = base.filter((r) => r.date >= weekStart);
-    else if (activeTab === 'month') base = base.filter((r) => r.date >= monthStart);
-    return base.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
-  }, [records, activeTab, today, weekStart, monthStart]);
-
-  const total = useMemo(
-    () => filtered.reduce((s, r) => s + r.amount, 0),
-    [filtered]
+  // Records for current viewed month
+  const monthPrefix = `${viewYear}-${String(viewMonth).padStart(2, '0')}`;
+  const monthRecords = useMemo(
+    () => records.filter((r) => r.date.startsWith(monthPrefix)),
+    [records, monthPrefix]
   );
+
+  // Records for selected date (or all month if none selected)
+  const displayRecords = useMemo(() => {
+    const base = selectedDate
+      ? records.filter((r) => r.date === selectedDate)
+      : monthRecords;
+    return [...base].sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+  }, [records, selectedDate, monthRecords]);
+
+  const displayTotal = useMemo(
+    () => displayRecords.reduce((s, r) => s + r.amount, 0),
+    [displayRecords]
+  );
+
+  const prevMonth = () => {
+    if (viewMonth === 1) { setViewYear(y => y - 1); setViewMonth(12); }
+    else setViewMonth(m => m - 1);
+    setSelectedDate(null);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 12) { setViewYear(y => y + 1); setViewMonth(1); }
+    else setViewMonth(m => m + 1);
+    setSelectedDate(null);
+  };
 
   const openEdit = (record: IncomeRecord) => {
     setEditRecord(record);
     setModalVisible(true);
   };
-
   const openAdd = () => {
     setEditRecord(null);
     setModalVisible(true);
   };
-
   const handleSave = (data: Omit<IncomeRecord, 'id' | 'createdAt'>) => {
-    if (editRecord) {
-      updateRecord(editRecord.id, data);
-    } else {
-      addRecord(data);
-    }
+    if (editRecord) updateRecord(editRecord.id, data);
+    else addRecord(data);
   };
+
+  const monthTotal = useMemo(
+    () => monthRecords.reduce((s, r) => s + r.amount, 0),
+    [monthRecords]
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
-
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>수입 기록</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
-          <Ionicons name="add" size={20} color="#059669" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Filter Tabs */}
-      <View style={styles.tabsWrap}>
-        <View style={styles.tabs}>
-          {TABS.map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-              onPress={() => setActiveTab(tab.key)}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab.key && styles.tabTextActive,
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={[styles.iconBtn, showCalendar && styles.iconBtnActive]}
+            onPress={() => setShowCalendar(v => !v)}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={18}
+              color={showCalendar ? '#059669' : '#6B7280'}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
+            <Ionicons name="add" size={20} color="#059669" />
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Total summary */}
-      <View style={styles.summaryBar}>
-        <Text style={styles.summaryCount}>{filtered.length}건</Text>
-        <Text style={styles.summaryTotal}>{formatKRW(total)}</Text>
+      {/* Month navigator */}
+      <View style={styles.monthNav}>
+        <TouchableOpacity onPress={prevMonth} style={styles.navBtn}>
+          <Ionicons name="chevron-back" size={20} color="#374151" />
+        </TouchableOpacity>
+        <View style={styles.monthInfo}>
+          <Text style={styles.monthLabel}>{viewYear}년 {viewMonth}월</Text>
+          <Text style={styles.monthTotal}>{formatKRW(monthTotal)}</Text>
+        </View>
+        <TouchableOpacity onPress={nextMonth} style={styles.navBtn}>
+          <Ionicons name="chevron-forward" size={20} color="#374151" />
+        </TouchableOpacity>
       </View>
 
-      {/* List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <RecordCard
-            record={item}
-            onDelete={deleteRecord}
-            onEdit={openEdit}
-          />
-        )}
-        contentContainerStyle={styles.list}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="receipt-outline" size={48} color="#D1D5DB" />
-            <Text style={styles.emptyText}>기록이 없습니다</Text>
-            <Text style={styles.emptySubText}>
-              {activeTab !== 'all'
-                ? '해당 기간에 기록된 수입이 없습니다'
-                : '+ 버튼을 눌러 첫 수입을 추가하세요'}
-            </Text>
+        stickyHeaderIndices={showCalendar ? [0] : []}
+      >
+        {/* Calendar */}
+        {showCalendar && (
+          <View style={styles.calendarCard}>
+            <MonthCalendar
+              year={viewYear}
+              month={viewMonth}
+              records={monthRecords}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+            />
           </View>
-        }
-      />
+        )}
+
+        {/* List header */}
+        <View style={styles.listHeader}>
+          <Text style={styles.listHeaderText}>
+            {selectedDate
+              ? `${selectedDate.replace(/-/g, '.')} · ${displayRecords.length}건`
+              : `${viewMonth}월 전체 · ${displayRecords.length}건`}
+          </Text>
+          <Text style={styles.listHeaderAmount}>{formatKRW(displayTotal)}</Text>
+        </View>
+
+        {/* Record list */}
+        {displayRecords.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="receipt-outline" size={44} color="#D1D5DB" />
+            <Text style={styles.emptyText}>기록이 없습니다</Text>
+          </View>
+        ) : (
+          displayRecords.map((r) => (
+            <RecordCard
+              key={r.id}
+              record={r}
+              onDelete={deleteRecord}
+              onEdit={openEdit}
+            />
+          ))
+        )}
+      </ScrollView>
 
       <AddRecordModal
         visible={modalVisible}
@@ -140,104 +170,73 @@ export function RecordsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
+  safe: { flex: 1, backgroundColor: '#F9FAFB' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 4,
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#111827',
+  headerTitle: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  headerRight: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  iconBtnActive: { backgroundColor: '#D1FAE5' },
   addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     backgroundColor: '#D1FAE5',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tabsWrap: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  tabs: {
+  monthNav: {
     flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 7,
     alignItems: 'center',
-    borderRadius: 9,
-  },
-  tabActive: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  navBtn: { padding: 6 },
+  monthInfo: { flex: 1, alignItems: 'center', gap: 1 },
+  monthLabel: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  monthTotal: { fontSize: 13, fontWeight: '600', color: '#059669' },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 12, paddingBottom: 32 },
+  calendarCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
     elevation: 2,
   },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  tabTextActive: {
-    color: '#111827',
-    fontWeight: '700',
-  },
-  summaryBar: {
+  listHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#F3F4F6',
-    marginBottom: 8,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
-  summaryCount: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  summaryTotal: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#059669',
-  },
-  list: {
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-    paddingTop: 4,
-  },
+  listHeaderText: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
+  listHeaderAmount: { fontSize: 14, fontWeight: '800', color: '#059669' },
   empty: {
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 48,
     gap: 8,
   },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#9CA3AF',
-  },
-  emptySubText: {
-    fontSize: 13,
-    color: '#D1D5DB',
-    textAlign: 'center',
-  },
+  emptyText: { fontSize: 15, color: '#9CA3AF', fontWeight: '500' },
 });

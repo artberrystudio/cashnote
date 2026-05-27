@@ -10,6 +10,7 @@ import { useFonts } from 'expo-font';
 import { useStore } from './src/store/useStore';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { RecordsScreen } from './src/screens/RecordsScreen';
+import { StatisticsScreen } from './src/screens/StatisticsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
@@ -41,20 +42,23 @@ function AppContent() {
             backgroundColor: '#FFFFFF',
             borderTopColor: '#F3F4F6',
             borderTopWidth: 1,
-            paddingBottom: 6,
+            paddingBottom: 8,
             paddingTop: 6,
-            height: 60,
+            height: 64,
           },
           tabBarLabelStyle: {
             fontSize: 11,
             fontWeight: '600',
+            marginBottom: 2,
           },
           tabBarIcon: ({ focused, color, size }) => {
             let iconName: string;
             if (route.name === 'Dashboard') {
               iconName = focused ? 'grid' : 'grid-outline';
             } else if (route.name === 'Records') {
-              iconName = focused ? 'list' : 'list-outline';
+              iconName = focused ? 'calendar' : 'calendar-outline';
+            } else if (route.name === 'Statistics') {
+              iconName = focused ? 'bar-chart' : 'bar-chart-outline';
             } else {
               iconName = focused ? 'settings' : 'settings-outline';
             }
@@ -70,7 +74,12 @@ function AppContent() {
         <Tab.Screen
           name="Records"
           component={RecordsScreen}
-          options={{ tabBarLabel: '수입 기록' }}
+          options={{ tabBarLabel: '기록' }}
+        />
+        <Tab.Screen
+          name="Statistics"
+          component={StatisticsScreen}
+          options={{ tabBarLabel: '통계' }}
         />
         <Tab.Screen
           name="Settings"
