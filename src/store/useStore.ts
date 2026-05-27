@@ -9,6 +9,10 @@ import {
   sbUpdate,
   sbDelete,
   sbBulkInsert,
+  signInWithEmail,
+  upgradeToEmailAccount,
+  signOutUser,
+  getUserInfo,
 } from '../lib/supabase';
 
 const STORAGE_KEY = '@cashnote_records';
@@ -50,12 +54,22 @@ interface StoreState {
   isLoaded: boolean;
   syncStatus: SyncStatus;
   userId: string | null;
+  userEmail: string | null;
+  isAnonymous: boolean;
   saveError: string | null;
+  authError: string | null;
+
   loadRecords: () => Promise<void>;
   addRecord: (data: Omit<IncomeRecord, 'id' | 'createdAt'>) => Promise<boolean>;
   updateRecord: (id: string, data: Omit<IncomeRecord, 'id' | 'createdAt'>) => Promise<boolean>;
   deleteRecord: (id: string) => Promise<boolean>;
   clearSaveError: () => void;
+  clearAuthError: () => void;
+
+  // 인증
+  signIn: (email: string, password: string) => Promise<boolean>;
+  signUp: (email: string, password: string) => Promise<boolean>;
+  signOut: () => Promise<void>;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -63,9 +77,13 @@ export const useStore = create<StoreState>((set, get) => ({
   isLoaded: false,
   syncStatus: 'idle',
   userId: null,
+  userEmail: null,
+  isAnonymous: true,
   saveError: null,
+  authError: null,
 
   clearSaveError: () => set({ saveError: null }),
+  clearAuthError: () => set({ authError: null }),
 
   // ── 초기 로드 ─────────────────────────────────────────────
   loadRecords: async () => {
@@ -83,16 +101,19 @@ export const useStore = create<StoreState>((set, get) => ({
       set({ isLoaded: true, syncStatus: 'offline' });
       return;
     }
-    set({ userId: uid });
 
-    // 3) 로컬 데이터 마이그레이션 (최초 1회)
+    // 3) 유저 정보 확인
+    const info = await getUserInfo();
+    set({ userId: uid, userEmail: info.email, isAnonymous: info.isAnonymous });
+
+    // 4) 로컬 데이터 마이그레이션 (최초 1회)
     const migrated = await AsyncStorage.getItem(MIGRATION_KEY);
     if (!migrated && cached.length > 0) {
       await sbBulkInsert(cached, uid);
       await AsyncStorage.setItem(MIGRATION_KEY, '1');
     }
 
-    // 4) Supabase에서 최신 데이터 로드
+    // 5) Supabase에서 최신 데이터 로드
     const remote = await sbFetchAll();
     if (remote !== null) {
       set({ records: remote, isLoaded: true, syncStatus: 'online' });
@@ -110,7 +131,7 @@ export const useStore = create<StoreState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
     const next = [record, ...get().records];
-    set({ records: next }); // 즉시 UI 반영
+    set({ records: next });
 
     const uid = get().userId;
     if (uid) {
@@ -161,5 +182,41 @@ export const useStore = create<StoreState>((set, get) => ({
     }
     await cacheSet(next);
     return true;
+  },
+
+  // ── 이메일 로그인 ─────────────────────────────────────────
+  signIn: async (email, password) => {
+    set({ authError: null });
+    try {
+      const uid = await signInWithEmail(email, password);
+      set({ userId: uid, userEmail: email, isAnonymous: false });
+      // 로그인 후 해당 계정 데이터 로드
+      await get().loadRecords();
+      return true;
+    } catch (e: any) {
+      set({ authError: e.message ?? '로그인 실패' });
+      return false;
+    }
+  },
+
+  // ── 이메일 회원가입 (익명 → 이메일 계정 업그레이드) ──────────
+  signUp: async (email, password) => {
+    set({ authError: null });
+    try {
+      const uid = await upgradeToEmailAccount(email, password);
+      set({ userId: uid, userEmail: email, isAnonymous: false });
+      return true;
+    } catch (e: any) {
+      set({ authError: e.message ?? '회원가입 실패' });
+      return false;
+    }
+  },
+
+  // ── 로그아웃 ──────────────────────────────────────────────
+  signOut: async () => {
+    await signOutUser();
+    set({ userId: null, userEmail: null, isAnonymous: true, records: [], syncStatus: 'idle' });
+    await cacheSet([]);
+    await get().loadRecords();
   },
 }));

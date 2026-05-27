@@ -10,7 +10,6 @@ const SUPABASE_ANON_KEY =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    // 네이티브에서는 AsyncStorage, 웹에서는 localStorage(기본값) 사용
     ...(Platform.OS !== 'web' && { storage: AsyncStorage as any }),
     autoRefreshToken: true,
     persistSession: true,
@@ -31,6 +30,47 @@ export async function ensureAuth(): Promise<string | null> {
     console.warn('[Supabase] 인증 실패:', e);
     return null;
   }
+}
+
+// ── 이메일 로그인 ──────────────────────────────────────────────
+export async function signInWithEmail(email: string, password: string): Promise<string> {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(translateAuthError(error.message));
+  return data.user?.id ?? '';
+}
+
+// ── 이메일 회원가입 (익명 계정 → 이메일 계정으로 업그레이드) ────────
+// 기존 익명 사용자의 user_id와 데이터를 그대로 유지합니다
+export async function upgradeToEmailAccount(email: string, password: string): Promise<string> {
+  const { data, error } = await supabase.auth.updateUser({ email, password });
+  if (error) throw new Error(translateAuthError(error.message));
+  return data.user?.id ?? '';
+}
+
+// ── 로그아웃 ───────────────────────────────────────────────────
+export async function signOutUser(): Promise<void> {
+  await supabase.auth.signOut();
+}
+
+// ── 현재 유저 정보 ─────────────────────────────────────────────
+export async function getUserInfo(): Promise<{ id: string | null; email: string | null; isAnonymous: boolean }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  return {
+    id: user?.id ?? null,
+    email: user?.email ?? null,
+    isAnonymous: user?.is_anonymous ?? true,
+  };
+}
+
+// ── 에러 메시지 한글화 ─────────────────────────────────────────
+function translateAuthError(msg: string): string {
+  if (msg.includes('Invalid login credentials')) return '이메일 또는 비밀번호가 올바르지 않습니다.';
+  if (msg.includes('Email not confirmed')) return '이메일 인증이 필요합니다. 받은 편지함을 확인해주세요.';
+  if (msg.includes('User already registered')) return '이미 등록된 이메일입니다. 로그인 탭을 이용해주세요.';
+  if (msg.includes('Password should be')) return '비밀번호는 6자 이상이어야 합니다.';
+  if (msg.includes('Unable to validate email')) return '올바른 이메일 형식을 입력해주세요.';
+  if (msg.includes('Email rate limit')) return '잠시 후 다시 시도해주세요.';
+  return msg;
 }
 
 // ── DB row ↔ IncomeRecord 변환 ──────────────────────────────────

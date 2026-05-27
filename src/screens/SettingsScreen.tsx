@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStore } from '../store/useStore';
 import { IncomeRecord } from '../types';
 import { formatKRW, getTodayString } from '../utils/format';
+import { AuthModal } from '../components/AuthModal';
 
 const STORAGE_KEY = '@cashnote_records';
 
@@ -58,9 +59,13 @@ const SYNC_LABEL: Record<string, { text: string; color: string; bg: string }> = 
 };
 
 export function SettingsScreen() {
-  const { records, loadRecords, syncStatus, userId } = useStore();
+  const { records, loadRecords, syncStatus, userId, userEmail, isAnonymous, signOut } = useStore();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState<string | null>(null);
+  const [authModal, setAuthModal] = useState<{ visible: boolean; tab: 'login' | 'signup' }>({
+    visible: false,
+    tab: 'login',
+  });
 
   const totalAmount = records.reduce((s, r) => s + r.amount, 0);
   const sync = SYNC_LABEL[syncStatus] ?? SYNC_LABEL.idle;
@@ -86,7 +91,6 @@ export function SettingsScreen() {
           onPress: async () => {
             setLoading('cache');
             try {
-              // AsyncStorage에서 앱 관련 외 임시 키 제거
               const allKeys = await AsyncStorage.getAllKeys();
               const cacheKeys = allKeys.filter(
                 (k) => k !== STORAGE_KEY && k.startsWith('@cashnote_')
@@ -99,6 +103,26 @@ export function SettingsScreen() {
               setLoading(null);
             }
             Alert.alert('완료', '캐시가 정리되었습니다.');
+          },
+        },
+      ]
+    );
+  };
+
+  // ── 로그아웃 ──────────────────────────────────────────────
+  const handleSignOut = () => {
+    Alert.alert(
+      '로그아웃',
+      '로그아웃하면 이 기기에서 데이터가 초기화됩니다.\n다시 로그인하면 데이터가 복원됩니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '로그아웃',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading('signout');
+            await signOut();
+            setLoading(null);
           },
         },
       ]
@@ -191,7 +215,6 @@ export function SettingsScreen() {
         });
       }
 
-      // 파싱 및 검증
       const backup = JSON.parse(json);
       if (!backup.records || !Array.isArray(backup.records)) {
         throw new Error('올바른 CashNote 백업 파일이 아닙니다.');
@@ -199,9 +222,7 @@ export function SettingsScreen() {
 
       const incoming: IncomeRecord[] = backup.records;
       const validFields = ['id', 'name', 'amount', 'category', 'date', 'createdAt'];
-      const isValid = incoming.every((r) =>
-        validFields.every((f) => f in r)
-      );
+      const isValid = incoming.every((r) => validFields.every((f) => f in r));
       if (!isValid) throw new Error('백업 데이터 형식이 올바르지 않습니다.');
 
       setLoading(null);
@@ -259,7 +280,6 @@ export function SettingsScreen() {
           { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16 },
         ]}
       >
-
         {/* 동기화 상태 */}
         <View style={[styles.syncBadge, { backgroundColor: sync.bg }]}>
           <Text style={[styles.syncText, { color: sync.color }]}>{sync.text}</Text>
@@ -267,6 +287,63 @@ export function SettingsScreen() {
             <Text style={styles.syncUid} numberOfLines={1}>ID: {userId.slice(0, 8)}…</Text>
           ) : null}
         </View>
+
+        {/* ── 계정 섹션 ─────────────────────────────────── */}
+        <Text style={styles.sectionLabel}>계정</Text>
+
+        {isAnonymous ? (
+          /* 비로그인 상태 */
+          <View style={styles.accountCard}>
+            <View style={styles.accountIconWrap}>
+              <Ionicons name="person-outline" size={28} color="#9CA3AF" />
+            </View>
+            <Text style={styles.accountTitle}>로그인하지 않은 상태</Text>
+            <Text style={styles.accountDesc}>
+              이메일 계정을 연동하면 어떤 기기에서도{'\n'}
+              로그인해서 데이터를 불러올 수 있습니다.
+            </Text>
+            <View style={styles.accountBtns}>
+              <TouchableOpacity
+                style={styles.accountBtnPrimary}
+                onPress={() => setAuthModal({ visible: true, tab: 'signup' })}
+              >
+                <Ionicons name="person-add-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.accountBtnPrimaryText}>회원가입</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.accountBtnSecondary}
+                onPress={() => setAuthModal({ visible: true, tab: 'login' })}
+              >
+                <Ionicons name="log-in-outline" size={16} color="#059669" />
+                <Text style={styles.accountBtnSecondaryText}>로그인</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          /* 로그인 상태 */
+          <View style={styles.group}>
+            <View style={styles.loggedInRow}>
+              <View style={[styles.rowIcon, { backgroundColor: '#D1FAE5' }]}>
+                <Ionicons name="person-circle-outline" size={20} color="#059669" />
+              </View>
+              <View style={styles.rowContent}>
+                <Text style={styles.rowTitle}>{userEmail}</Text>
+                <Text style={styles.rowSub}>이메일 계정으로 로그인됨</Text>
+              </View>
+            </View>
+            <Separator />
+            <SettingsRow
+              icon="log-out-outline"
+              iconColor="#EF4444"
+              iconBg="#FEE2E2"
+              title="로그아웃"
+              subtitle="다른 계정으로 전환하거나 로그아웃합니다"
+              onPress={handleSignOut}
+              loading={loading === 'signout'}
+              danger
+            />
+          </View>
+        )}
 
         {/* 데이터 요약 */}
         <View style={styles.statsCard}>
@@ -349,6 +426,13 @@ export function SettingsScreen() {
 
         <Text style={styles.footer}>CashNote v1.0.0</Text>
       </ScrollView>
+
+      {/* 이메일 인증 모달 */}
+      <AuthModal
+        visible={authModal.visible}
+        onClose={() => setAuthModal({ visible: false, tab: 'login' })}
+        initialTab={authModal.tab}
+      />
     </SafeAreaView>
   );
 }
@@ -419,6 +503,76 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   content: { paddingTop: 16, paddingHorizontal: 16 },
+
+  // 계정 카드 (비로그인)
+  accountCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  accountIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  accountTitle: { fontSize: 15, fontWeight: '700', color: '#374151' },
+  accountDesc: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  accountBtns: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    width: '100%',
+  },
+  accountBtnPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#059669',
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  accountBtnPrimaryText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  accountBtnSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+  },
+  accountBtnSecondaryText: { fontSize: 14, fontWeight: '700', color: '#059669' },
+
+  // 로그인 상태 row
+  loggedInRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 14,
+  },
 
   statsCard: {
     flexDirection: 'row',
