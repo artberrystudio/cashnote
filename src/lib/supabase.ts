@@ -39,12 +39,29 @@ export async function signInWithEmail(email: string, password: string): Promise<
   return data.user?.id ?? '';
 }
 
-// ── 이메일 회원가입 (익명 계정 → 이메일 계정으로 업그레이드) ────────
-// 기존 익명 사용자의 user_id와 데이터를 그대로 유지합니다
+// ── 이메일 회원가입 ────────────────────────────────────────────
+// - 익명 세션이 있으면 → updateUser로 업그레이드 (기존 데이터 유지)
+// - 세션이 없으면     → signUp으로 신규 계정 생성
 export async function upgradeToEmailAccount(email: string, password: string): Promise<string> {
-  const { data, error } = await supabase.auth.updateUser({ email, password });
-  if (error) throw new Error(translateAuthError(error.message));
-  return data.user?.id ?? '';
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (session?.user) {
+    // 익명 세션 → 이메일 계정으로 업그레이드 (user_id 유지)
+    const { data, error } = await supabase.auth.updateUser({ email, password });
+    if (error) throw new Error(translateAuthError(error.message));
+    return data.user?.id ?? '';
+  } else {
+    // 세션 없음 → 새 계정 생성
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw new Error(translateAuthError(error.message));
+    // signUp 후 자동 로그인 시도
+    if (data.user && !data.session) {
+      // 이메일 확인 필요한 경우 — 바로 로그인 시도
+      const { data: d2, error: e2 } = await supabase.auth.signInWithPassword({ email, password });
+      if (!e2 && d2.user) return d2.user.id;
+    }
+    return data.user?.id ?? '';
+  }
 }
 
 // ── 로그아웃 ───────────────────────────────────────────────────
