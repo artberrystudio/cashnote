@@ -33,7 +33,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "deploy": "expo export --platform web && node scripts/postexport.js && vercel deploy --prebuilt --prod --yes"
   },
   "private": true,
   "devDependencies": {
