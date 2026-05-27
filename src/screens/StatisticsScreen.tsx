@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../store/useStore';
 import { CATEGORIES, CATEGORY_LIST } from '../utils/categories';
@@ -33,8 +33,11 @@ function getRecentMonths(n: number) {
   return result;
 }
 
+const TAB_BAR_HEIGHT = 64;
+
 export function StatisticsScreen() {
   const { records } = useStore();
+  const insets = useSafeAreaInsets();
   const [period, setPeriod] = useState<Period>('month');
 
   const now = new Date();
@@ -124,7 +127,10 @@ export function StatisticsScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* 요약 */}

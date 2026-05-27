@@ -9,7 +9,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
@@ -48,8 +48,11 @@ function webReadFile(): Promise<string> {
 }
 // ─────────────────────────────────────────────────────────────
 
+const TAB_BAR_HEIGHT = 64;
+
 export function SettingsScreen() {
   const { records, loadRecords } = useStore();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState<string | null>(null);
 
   const totalAmount = records.reduce((s, r) => s + r.amount, 0);
@@ -241,7 +244,13 @@ export function SettingsScreen() {
         <Text style={styles.headerTitle}>설정</Text>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16 },
+        ]}
+      >
 
         {/* 데이터 요약 */}
         <View style={styles.statsCard}>

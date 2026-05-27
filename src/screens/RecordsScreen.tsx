@@ -2,12 +2,11 @@ import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../store/useStore';
 import { RecordCard } from '../components/RecordCard';
@@ -16,8 +15,11 @@ import { AddRecordModal } from '../components/AddRecordModal';
 import { IncomeRecord } from '../types';
 import { formatKRW } from '../utils/format';
 
+const TAB_BAR_HEIGHT = 64;
+
 export function RecordsScreen() {
   const { records, addRecord, updateRecord, deleteRecord } = useStore();
+  const insets = useSafeAreaInsets();
 
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -114,7 +116,10 @@ export function RecordsScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16 },
+        ]}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={showCalendar ? [0] : []}
       >
