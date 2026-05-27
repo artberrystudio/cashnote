@@ -7,8 +7,6 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
-  Modal,
-  Pressable,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +20,7 @@ import { formatKRW, getTodayString } from '../utils/format';
 import { AuthModal } from '../components/AuthModal';
 
 const STORAGE_KEY = '@cashnote_records';
-const TAB_BAR_HEIGHT = 64;
+const TAB_BAR_HEIGHT = 56;
 
 // ─── 웹/네이티브 공용 Alert ────────────────────────────────────
 function appAlert(
@@ -39,12 +37,10 @@ function appAlert(
     const nonCancel = buttons.filter((b) => b.style !== 'cancel');
     const cancel    = buttons.find((b) => b.style === 'cancel');
     if (nonCancel.length === 1 && cancel) {
-      // confirm 다이얼로그: OK → destructive/default 버튼
       const ok = window.confirm(`${title}\n\n${message}`);
       if (ok) nonCancel[0]?.onPress?.();
       else cancel?.onPress?.();
     } else if (nonCancel.length > 1) {
-      // 선택지 여러 개 → 순서대로 confirm
       const first = window.confirm(`${title}\n\n${message}\n\n[확인] = "${nonCancel[0].text}"`);
       if (first) { nonCancel[0].onPress?.(); return; }
       const second = window.confirm(`"${nonCancel[1].text}" 을 선택하시겠습니까?`);
@@ -105,7 +101,6 @@ export function SettingsScreen() {
   const totalAmount = records.reduce((s, r) => s + r.amount, 0);
   const sync = SYNC_LABEL[syncStatus] ?? SYNC_LABEL.idle;
 
-  // ── 새로고침 ──────────────────────────────────────────────
   const handleRefresh = async () => {
     setLoading('refresh');
     await loadRecords();
@@ -113,7 +108,6 @@ export function SettingsScreen() {
     appAlert('완료', '데이터를 새로 불러왔습니다.');
   };
 
-  // ── 캐시 지우기 ───────────────────────────────────────────
   const handleClearCache = () => {
     appAlert(
       '캐시 지우기',
@@ -139,7 +133,6 @@ export function SettingsScreen() {
     );
   };
 
-  // ── 로그아웃 ──────────────────────────────────────────────
   const handleSignOut = () => {
     appAlert(
       '로그아웃',
@@ -158,7 +151,6 @@ export function SettingsScreen() {
     );
   };
 
-  // ── 전체 데이터 삭제 (Supabase 포함) ─────────────────────
   const handleDeleteAll = () => {
     appAlert(
       '⚠️ 전체 데이터 삭제',
@@ -169,7 +161,6 @@ export function SettingsScreen() {
           text: '삭제', style: 'destructive',
           onPress: async () => {
             setLoading('delete');
-            // Supabase + 캐시 모두 삭제
             const ids = records.map((r) => r.id);
             for (const id of ids) await deleteRecord(id);
             await AsyncStorage.removeItem(STORAGE_KEY);
@@ -182,23 +173,13 @@ export function SettingsScreen() {
     );
   };
 
-  // ── 백업 내보내기 ─────────────────────────────────────────
   const handleExport = async () => {
-    if (records.length === 0) {
-      appAlert('알림', '내보낼 기록이 없습니다.');
-      return;
-    }
+    if (records.length === 0) { appAlert('알림', '내보낼 기록이 없습니다.'); return; }
     setLoading('export');
     try {
-      const backup = {
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        count: records.length,
-        records,
-      };
+      const backup = { version: 1, exportedAt: new Date().toISOString(), count: records.length, records };
       const json     = JSON.stringify(backup, null, 2);
       const filename = `cashnote-backup-${getTodayString()}.json`;
-
       if (Platform.OS === 'web') {
         webDownload(filename, json);
         appAlert('백업 완료', `${records.length}건의 기록이 다운로드되었습니다.`);
@@ -217,7 +198,6 @@ export function SettingsScreen() {
     } finally { setLoading(null); }
   };
 
-  // ── 백업 불러오기 (Supabase 포함) ─────────────────────────
   const handleImport = async () => {
     setLoading('import');
     try {
@@ -229,18 +209,14 @@ export function SettingsScreen() {
         if (result.canceled || !result.assets?.[0]) { setLoading(null); return; }
         json = await FileSystem.readAsStringAsync(result.assets[0].uri, { encoding: FileSystem.EncodingType.UTF8 });
       }
-
       const backup = JSON.parse(json);
       if (!backup.records || !Array.isArray(backup.records))
         throw new Error('올바른 CashNote 백업 파일이 아닙니다.');
-
       const incoming: IncomeRecord[] = backup.records;
       const validFields = ['id', 'name', 'amount', 'category', 'date', 'createdAt'];
       if (!incoming.every((r) => validFields.every((f) => f in r)))
         throw new Error('백업 데이터 형식이 올바르지 않습니다.');
-
       setLoading(null);
-
       appAlert(
         '백업 불러오기',
         `백업 파일에 ${incoming.length}건이 있습니다.\n중복을 제외하고 추가할까요?`,
@@ -252,7 +228,6 @@ export function SettingsScreen() {
               setLoading('import');
               const existingIds = new Set(records.map((r) => r.id));
               const newRecords  = incoming.filter((r) => !existingIds.has(r.id));
-              // Supabase에 addRecord로 저장
               for (const r of newRecords) {
                 const { id, createdAt, ...data } = r;
                 await addRecord(data);
@@ -269,7 +244,6 @@ export function SettingsScreen() {
     }
   };
 
-  // ─── UI ───────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
@@ -491,7 +465,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, overflow: 'hidden',
   },
   sep: { height: 1, backgroundColor: '#F9FAFB', marginLeft: 68 },
-
   row: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 14, gap: 14,
@@ -501,16 +474,13 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
   rowTitleDanger: { color: '#EF4444' },
   rowSub: { fontSize: 12, color: '#9CA3AF' },
-
   badgeWrap: { backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   badgeText: { fontSize: 12, fontWeight: '700', color: '#059669' },
-
   syncBadge: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12,
   },
   syncText: { fontSize: 13, fontWeight: '600' },
   syncUid: { fontSize: 11, color: '#9CA3AF' },
-
   footer: { textAlign: 'center', fontSize: 12, color: '#D1D5DB', marginTop: 8 },
 });

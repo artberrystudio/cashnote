@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 
@@ -18,6 +18,7 @@ const Tab = createBottomTabNavigator();
 function AppContent() {
   const { isLoaded, loadRecords, saveError, clearSaveError } = useStore();
   const [fontsLoaded] = useFonts(Ionicons.font);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadRecords();
@@ -39,6 +40,9 @@ function AppContent() {
     );
   }
 
+  // safe area 하단 여백 반영 (홈바, 브라우저 하단 UI 등)
+  const tabBarHeight = 56 + insets.bottom;
+
   return (
     <NavigationContainer>
       <Tab.Navigator
@@ -50,9 +54,9 @@ function AppContent() {
             backgroundColor: '#FFFFFF',
             borderTopColor: '#F3F4F6',
             borderTopWidth: 1,
-            paddingBottom: 8,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
             paddingTop: 6,
-            height: 64,
+            height: tabBarHeight,
           },
           tabBarLabelStyle: {
             fontSize: 11,

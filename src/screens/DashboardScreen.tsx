@@ -17,7 +17,7 @@ import { AddRecordModal } from '../components/AddRecordModal';
 import { formatKRW, getTodayString, getMonthStart } from '../utils/format';
 import { IncomeRecord } from '../types';
 
-const TAB_BAR_HEIGHT = 64;
+const TAB_BAR_HEIGHT = 56;
 
 export function DashboardScreen() {
   const { records, addRecord, updateRecord, deleteRecord } = useStore();

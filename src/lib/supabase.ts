@@ -42,7 +42,14 @@ export async function signInWithEmail(email: string, password: string): Promise<
 // ── 이메일 회원가입 → 즉시 로그인까지 처리 ───────────────────
 export async function upgradeToEmailAccount(email: string, password: string): Promise<string> {
   // 1) 회원가입
-  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
+  let signUpData: any, signUpError: any;
+  try {
+    const result = await supabase.auth.signUp({ email, password });
+    signUpData = result.data;
+    signUpError = result.error;
+  } catch (e: any) {
+    throw new Error(translateAuthError(e.message ?? 'Load failed'));
+  }
   if (signUpError) {
     // 이미 가입된 경우 → 로그인으로 처리
     if (signUpError.message.includes('already registered') || signUpError.message.includes('already been registered')) {
@@ -81,12 +88,16 @@ export async function getUserInfo(): Promise<{ id: string | null; email: string 
 
 // ── 에러 메시지 한글화 ─────────────────────────────────────────
 function translateAuthError(msg: string): string {
+  if (!msg) return '알 수 없는 오류가 발생했습니다.';
+  if (msg.includes('Load failed') || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network'))
+    return '네트워크 연결을 확인해주세요. (Supabase URL 설정이 필요할 수 있습니다)';
   if (msg.includes('Invalid login credentials')) return '이메일 또는 비밀번호가 올바르지 않습니다.';
   if (msg.includes('Email not confirmed')) return '이메일 인증이 필요합니다. 받은 편지함을 확인해주세요.';
-  if (msg.includes('User already registered')) return '이미 등록된 이메일입니다. 로그인 탭을 이용해주세요.';
+  if (msg.includes('User already registered') || msg.includes('already been registered')) return '이미 등록된 이메일입니다. 로그인 탭을 이용해주세요.';
   if (msg.includes('Password should be')) return '비밀번호는 6자 이상이어야 합니다.';
-  if (msg.includes('Unable to validate email')) return '올바른 이메일 형식을 입력해주세요.';
-  if (msg.includes('Email rate limit')) return '잠시 후 다시 시도해주세요.';
+  if (msg.includes('Unable to validate email') || msg.includes('valid email')) return '올바른 이메일 형식을 입력해주세요.';
+  if (msg.includes('Email rate limit') || msg.includes('rate limit')) return '잠시 후 다시 시도해주세요.';
+  if (msg.includes('Anonymous sign-ins are disabled')) return '익명 로그인이 비활성화되어 있습니다. Supabase 대시보드에서 활성화해주세요.';
   return msg;
 }
 

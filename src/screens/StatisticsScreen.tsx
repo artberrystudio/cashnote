@@ -33,7 +33,7 @@ function getRecentMonths(n: number) {
   return result;
 }
 
-const TAB_BAR_HEIGHT = 64;
+const TAB_BAR_HEIGHT = 56;
 
 export function StatisticsScreen() {
   const { records } = useStore();
