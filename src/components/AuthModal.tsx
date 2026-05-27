@@ -68,8 +68,11 @@ export function AuthModal({ visible, onClose, initialTab = 'login' }: Props) {
       const ok = await signUp(email.trim(), password);
       setLoading(false);
       if (ok) {
-        setSuccessMsg('계정이 연동되었습니다! ✅\n다른 기기에서도 이 이메일로 로그인하면\n데이터가 자동으로 동기화됩니다.');
-        // 이메일 확인이 필요할 수 있으므로 자동 닫기 안 함
+        setSuccessMsg('가입 완료! 🎉\n이제 어떤 기기에서도 이 이메일로\n로그인하면 데이터가 동기화됩니다.');
+        setTimeout(() => handleClose(), 1800);
+      } else if (authError === 'EMAIL_CONFIRM_NEEDED') {
+        // 이메일 확인 필요 케이스
+        setSuccessMsg(`📧 가입 완료!\n${email} 로 인증 링크를 보냈습니다.\n이메일 확인 후 로그인해주세요.`);
       }
     }
   };

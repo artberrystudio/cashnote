@@ -39,29 +39,29 @@ export async function signInWithEmail(email: string, password: string): Promise<
   return data.user?.id ?? '';
 }
 
-// ── 이메일 회원가입 ────────────────────────────────────────────
-// - 익명 세션이 있으면 → updateUser로 업그레이드 (기존 데이터 유지)
-// - 세션이 없으면     → signUp으로 신규 계정 생성
+// ── 이메일 회원가입 → 즉시 로그인까지 처리 ───────────────────
 export async function upgradeToEmailAccount(email: string, password: string): Promise<string> {
-  const { data: { session } } = await supabase.auth.getSession();
-
-  if (session?.user) {
-    // 익명 세션 → 이메일 계정으로 업그레이드 (user_id 유지)
-    const { data, error } = await supabase.auth.updateUser({ email, password });
-    if (error) throw new Error(translateAuthError(error.message));
-    return data.user?.id ?? '';
-  } else {
-    // 세션 없음 → 새 계정 생성
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) throw new Error(translateAuthError(error.message));
-    // signUp 후 자동 로그인 시도
-    if (data.user && !data.session) {
-      // 이메일 확인 필요한 경우 — 바로 로그인 시도
-      const { data: d2, error: e2 } = await supabase.auth.signInWithPassword({ email, password });
-      if (!e2 && d2.user) return d2.user.id;
+  // 1) 회원가입
+  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
+  if (signUpError) {
+    // 이미 가입된 경우 → 로그인으로 처리
+    if (signUpError.message.includes('already registered') || signUpError.message.includes('already been registered')) {
+      throw new Error('이미 등록된 이메일입니다. 로그인 탭을 이용해주세요.');
     }
-    return data.user?.id ?? '';
+    throw new Error(translateAuthError(signUpError.message));
   }
+
+  // 2) 이메일 확인 없이 바로 로그인 시도
+  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+  if (!signInError && signInData.user) {
+    return signInData.user.id;
+  }
+
+  // 3) 로그인 실패 (이메일 확인 필요) → 확인 요청 안내
+  if (signUpData.user) {
+    throw new Error('EMAIL_CONFIRM_NEEDED');
+  }
+  throw new Error('회원가입에 실패했습니다. 다시 시도해주세요.');
 }
 
 // ── 로그아웃 ───────────────────────────────────────────────────

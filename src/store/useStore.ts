@@ -199,14 +199,20 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  // ── 이메일 회원가입 (익명 → 이메일 계정 업그레이드) ──────────
+  // ── 이메일 회원가입 ──────────────────────────────────────────
   signUp: async (email, password) => {
     set({ authError: null });
     try {
       const uid = await upgradeToEmailAccount(email, password);
       set({ userId: uid, userEmail: email, isAnonymous: false });
+      await get().loadRecords();
       return true;
     } catch (e: any) {
+      if (e.message === 'EMAIL_CONFIRM_NEEDED') {
+        // 이메일 확인 필요 → 특수 처리 (AuthModal에서 안내)
+        set({ authError: 'EMAIL_CONFIRM_NEEDED' });
+        return false;
+      }
       set({ authError: e.message ?? '회원가입 실패' });
       return false;
     }
