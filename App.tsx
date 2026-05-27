@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
@@ -16,12 +16,20 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 const Tab = createBottomTabNavigator();
 
 function AppContent() {
-  const { isLoaded, loadRecords } = useStore();
+  const { isLoaded, loadRecords, saveError, clearSaveError } = useStore();
   const [fontsLoaded] = useFonts(Ionicons.font);
 
   useEffect(() => {
     loadRecords();
   }, []);
+
+  useEffect(() => {
+    if (saveError) {
+      Alert.alert('⚠️ 저장 오류', saveError, [
+        { text: '확인', onPress: clearSaveError },
+      ]);
+    }
+  }, [saveError]);
 
   if (!isLoaded || !fontsLoaded) {
     return (
